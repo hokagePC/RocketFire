@@ -1,136 +1,247 @@
 
--- ROCKET FIRE | Fling Things and People
--- Delta Executor | Client-side prototype
+-- ROCKET FIRE v4
+-- Delta Executor | Flight prototype
 
 local Players = game:GetService("Players")
+local UIS = game:GetService("UserInputService")
 local RunService = game:GetService("RunService")
-local UserInputService = game:GetService("UserInputService")
+local CoreGui = game:GetService("CoreGui")
 
 local player = Players.LocalPlayer
 local camera = workspace.CurrentCamera
 
-local rockets = {}
-local enabled = false
-local flying = false
-local speed = 100
-local rocketCount = 3
+pcall(function()
+    CoreGui.RocketFireV4:Destroy()
+end)
 
 local gui = Instance.new("ScreenGui")
-gui.Name = "RocketFire"
+gui.Name = "RocketFireV4"
 gui.ResetOnSpawn = false
-gui.Parent = game:GetService("CoreGui")
+gui.Parent = CoreGui
 
-local frame = Instance.new("Frame")
-frame.Size = UDim2.fromOffset(220, 240)
-frame.Position = UDim2.new(0, 20, 0.35, 0)
-frame.BackgroundColor3 = Color3.fromRGB(20, 23, 30)
-frame.Parent = gui
+local main = Instance.new("Frame")
+main.Size = UDim2.fromOffset(270, 390)
+main.Position = UDim2.new(0.5,-135,0.5,-195)
+main.BackgroundColor3 = Color3.fromRGB(20,23,32)
+main.Parent = gui
+Instance.new("UICorner",main).CornerRadius = UDim.new(0,12)
 
-local function button(name, position, callback)
+local function button(text,y,parent)
     local b = Instance.new("TextButton")
-    b.Size = UDim2.fromOffset(190, 38)
-    b.Position = position
-    b.BackgroundColor3 = Color3.fromRGB(45, 55, 75)
-    b.TextColor3 = Color3.new(1, 1, 1)
-    b.Text = name
+    b.Size = UDim2.new(1,-20,0,38)
+    b.Position = UDim2.fromOffset(10,y)
+    b.BackgroundColor3 = Color3.fromRGB(45,57,77)
+    b.TextColor3 = Color3.new(1,1,1)
     b.TextSize = 15
-    b.Parent = frame
-    b.MouseButton1Click:Connect(callback)
+    b.Text = text
+    b.Parent = parent
+    Instance.new("UICorner",b).CornerRadius = UDim.new(0,8)
     return b
 end
 
-local title = Instance.new("TextLabel")
-title.Size = UDim2.new(1, 0, 0, 35)
-title.BackgroundTransparency = 1
-title.Text = "ROCKET FIRE"
-title.TextColor3 = Color3.fromRGB(255, 120, 50)
-title.TextSize = 20
-title.Parent = frame
+local title = button("ROCKET FIRE V4",0,main)
+title.BackgroundColor3 = Color3.fromRGB(30,38,53)
 
-local status = button("ROCKET: OFF", UDim2.fromOffset(15, 45), function()
-    enabled = not enabled
-    status.Text = enabled and "ROCKET: ON" or "ROCKET: OFF"
-end)
+local status = Instance.new("TextLabel")
+status.Size = UDim2.new(1,-20,0,25)
+status.Position = UDim2.fromOffset(10,42)
+status.BackgroundTransparency = 1
+status.TextColor3 = Color3.fromRGB(255,150,70)
+status.Text = "STATUS: READY"
+status.Parent = main
 
-local spawnButton = button("SPAWN ROCKETS", UDim2.fromOffset(15, 90), function()
-    if not enabled then return end
+local spawn = button("SPAWN ROCKET",75,main)
+local grab = button("GRAB / RELEASE",120,main)
+local fpv = button("FPV CAMERA",165,main)
+local boost = button("BOOST: OFF",210,main)
+local plus = button("DISTANCE +",255,main)
+local minus = button("DISTANCE -",300,main)
+local minimize = button("MINIMIZE",345,main)
+
+local mini = button("🚀",0,gui)
+mini.Size = UDim2.fromOffset(55,55)
+mini.Position = UDim2.new(0,15,0.5,0)
+mini.Visible = false
+
+local rocket
+local launched = false
+local grabbed = false
+local boosting = false
+local fpvEnabled = false
+
+local speed = 70
+local distance = 8
+local velocity = Vector3.zero
+local oldCameraType
+local oldSubject
+
+local function createRocket()
+    if rocket then rocket:Destroy() end
 
     local character = player.Character
     local root = character and character:FindFirstChild("HumanoidRootPart")
     if not root then return end
 
-    for i = 1, rocketCount do
-        local rocket = Instance.new("Part")
-        rocket.Name = "VisualRocket"
-        rocket.Size = Vector3.new(1, 1, 3)
-        rocket.Material = Enum.Material.Neon
-        rocket.Color = Color3.fromRGB(255, 100, 20)
-        rocket.Anchored = true
-        rocket.CanCollide = false
-        rocket.CFrame = root.CFrame * CFrame.new((i-2)*3, 5, -4)
-        rocket.Parent = workspace
+    rocket = Instance.new("Part")
+    rocket.Name = "RocketFirePrototype"
+    rocket.Size = Vector3.new(1,1,3)
+    rocket.Color = Color3.fromRGB(220,35,25)
+    rocket.Material = Enum.Material.Metal
+    rocket.Anchored = true
+    rocket.CanCollide = false
+    rocket.CFrame = root.CFrame * CFrame.new(0,2,-distance)
+    rocket.Parent = workspace
 
-        table.insert(rockets, rocket)
+    local light = Instance.new("PointLight")
+    light.Color = Color3.fromRGB(255,100,30)
+    light.Brightness = 2
+    light.Range = 10
+    light.Parent = rocket
+
+    local fire = Instance.new("Fire")
+    fire.Size = 3
+    fire.Heat = 5
+    fire.Parent = rocket
+
+    velocity = Vector3.zero
+    launched = false
+    grabbed = false
+    status.Text = "STATUS: ROCKET READY"
+end
+
+spawn.MouseButton1Click:Connect(createRocket)
+
+grab.MouseButton1Click:Connect(function()
+    if not rocket then return end
+
+    grabbed = not grabbed
+    launched = not grabbed
+
+    if launched then
+        velocity = camera.CFrame.LookVector * speed
+    end
+
+    status.Text = grabbed and "STATUS: GRABBED" or "STATUS: RELEASED"
+end)
+
+boost.MouseButton1Click:Connect(function()
+    boosting = not boosting
+    boost.Text = boosting and "BOOST: ON" or "BOOST: OFF"
+end)
+
+plus.MouseButton1Click:Connect(function()
+    distance = math.min(distance + 2,50)
+    status.Text = "DISTANCE: "..distance
+end)
+
+minus.MouseButton1Click:Connect(function()
+    distance = math.max(distance - 2,2)
+    status.Text = "DISTANCE: "..distance
+end)
+
+fpv.MouseButton1Click:Connect(function()
+    if not rocket then return end
+
+    fpvEnabled = not fpvEnabled
+
+    if fpvEnabled then
+        oldCameraType = camera.CameraType
+        oldSubject = camera.CameraSubject
+        camera.CameraType = Enum.CameraType.Scriptable
+    else
+        camera.CameraType = oldCameraType or Enum.CameraType.Custom
+        camera.CameraSubject = oldSubject
     end
 end)
-
-local fireButton = button("FIRE / FPV", UDim2.fromOffset(15, 135), function()
-    flying = not flying
-    fireButton.Text = flying and "STOP FPV" or "FIRE / FPV"
-end)
-
-local speedButton = button("SPEED: 100", UDim2.fromOffset(15, 180), function()
-    speed = speed + 25
-    if speed > 250 then speed = 50 end
-    speedButton.Text = "SPEED: " .. speed
-end)
-
-local activeRocket
 
 RunService.RenderStepped:Connect(function(dt)
-    if not flying then return end
+    if not rocket or not rocket.Parent then return end
 
-    if not activeRocket or not activeRocket.Parent then
-        activeRocket = rockets[1]
-    end
-
-    if not activeRocket then return end
-
-    local direction = camera.CFrame.LookVector
-    local nextPosition = activeRocket.Position + direction * speed * dt
-
-    local params = RaycastParams.new()
-    params.FilterType = Enum.RaycastFilterType.Exclude
-    params.FilterDescendantsInstances = {activeRocket, player.Character}
-
-    local result = workspace:Raycast(
-        activeRocket.Position,
-        nextPosition - activeRocket.Position,
-        params
-    )
-
-    if result then
-        local explosion = Instance.new("Explosion")
-        explosion.Position = result.Position
-        explosion.BlastRadius = 0
-        explosion.BlastPressure = 0
-        explosion.Parent = workspace
-
-        activeRocket:Destroy()
-        activeRocket = nil
-        flying = false
-    else
-        activeRocket.CFrame = CFrame.lookAt(nextPosition, nextPosition + direction)
-    end
-end)
-
-button("CLEAR ROCKETS", UDim2.fromOffset(15, 215), function()
-    for _, rocket in ipairs(rockets) do
-        if rocket and rocket.Parent then
-            rocket:Destroy()
+    if grabbed then
+        local character = player.Character
+        local root = character and character:FindFirstChild("HumanoidRootPart")
+        if root then
+            rocket.CFrame = root.CFrame * CFrame.new(0,2,-distance)
         end
+    elseif launched then
+        local direction = camera.CFrame.LookVector
+        local acceleration = boosting and 180 or 35
+
+        velocity = velocity + direction * acceleration * dt
+        velocity = velocity + Vector3.new(0,-workspace.Gravity*0.15*dt,0)
+
+        local position = rocket.Position + velocity * dt
+
+        local params = RaycastParams.new()
+        params.FilterType = Enum.RaycastFilterType.Exclude
+        params.FilterDescendantsInstances = {rocket,player.Character}
+
+        local result = workspace:Raycast(
+            rocket.Position,
+            position - rocket.Position,
+            params
+        )
+
+        if result then
+            local effect = Instance.new("Explosion")
+            effect.Position = result.Position
+            effect.BlastRadius = 0
+            effect.BlastPressure = 0
+            effect.Parent = workspace
+
+            rocket:Destroy()
+            rocket = nil
+            launched = false
+            status.Text = "STATUS: IMPACT"
+            return
+        end
+
+        rocket.CFrame = CFrame.lookAt(position,position+velocity.Unit)
     end
-    table.clear(rockets)
-    activeRocket = nil
-    flying = false
+
+    if fpvEnabled and rocket then
+        camera.CFrame = rocket.CFrame * CFrame.new(0,1,4)
+    end
 end)
+
+minimize.MouseButton1Click:Connect(function()
+    main.Visible = false
+    mini.Visible = true
+end)
+
+mini.MouseButton1Click:Connect(function()
+    main.Visible = true
+    mini.Visible = false
+end)
+
+-- Drag window
+local dragging,dragStart,startPos
+
+title.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.Touch
+    or input.UserInputType == Enum.UserInputType.MouseButton1 then
+        dragging = true
+        dragStart = input.Position
+        startPos = main.Position
+    end
+end)
+
+UIS.InputChanged:Connect(function(input)
+    if dragging and (input.UserInputType == Enum.UserInputType.Touch
+    or input.UserInputType == Enum.UserInputType.MouseMovement) then
+        local delta = input.Position-dragStart
+        main.Position = UDim2.new(
+            startPos.X.Scale,startPos.X.Offset+delta.X,
+            startPos.Y.Scale,startPos.Y.Offset+delta.Y
+        )
+    end
+end)
+
+UIS.InputEnded:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.Touch
+    or input.UserInputType == Enum.UserInputType.MouseButton1 then
+        dragging = false
+    end
+end)
+
+print("RocketFire V4 loaded")
